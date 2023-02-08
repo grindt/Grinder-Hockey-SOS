@@ -1,3 +1,4 @@
+//methods/classes required for showcase to work ===================================================================================================
 class Output {
     outputItems = [];
 
@@ -97,6 +98,7 @@ class TeamRecord {
         this.totalTies = 0;
         this.totalGoalFor = 0;
         this.totalGoalAgainst = 0;
+        this.classWeight = 0;
     }
 
     newOp(teamID) {
@@ -127,7 +129,6 @@ class Record {
     }
 }
 
-//helper methods ---------------------------------------------------------------
 function CSVToArray( strData, strDelimiter ){
     strDelimiter = (strDelimiter || ",");
     var objPattern = new RegExp(
@@ -172,59 +173,20 @@ function handleFileSelect(event) {
     reader.onload = handleFileLoad;
     reader.readAsText(event.target.files[0])
 }
-//end helper methods ----------------------------------------------------------------------
 
 function handleFileLoad(event) {
     let csv = event.target.result;
     document.getElementById('fileContent').textContent = csv;
 
-    let csvArr = CSVToArray(csv, ',');
-
-    let record = parseCSVIntoRecord(csvArr);
-
-    let output = generateOutput(record);
-
-    printOutput(output);
-    
-}
-
-function parseCSVIntoRecord(arr) {
-    let record = new Records();
-
-    // structure of csv input array
-    // [GAME#(unique) , TeamID(home), ClassWeight(home), HOME TEAM, HOME SCORE, AWAY SCORE, AWAY TEAM, TeamID(away), ClassWeight(away)]
-    arr.forEach(item => {
-        if(!(item.length === 9)) return;
-
-        let homeTeamID = item[1];
-        let awayTeamID = item[7];
-        let homeScore = item[4];
-        let awayScore = item[5];
-        //home team
-        if(!record.isTeamInTeamRecords(homeTeamID)) record.newTeamRecord(homeTeamID, item[3]);
-        if(!record.teamRecords[record.getTeamIndex(homeTeamID)].isTeamInOps(awayTeamID)) {
-            record.teamRecords[record.getTeamIndex(homeTeamID)].newOp(awayTeamID);
-        }
-
-        //away team
-        if(!record.isTeamInTeamRecords(awayTeamID)) record.newTeamRecord(awayTeamID, item[6]);
-        if(!record.teamRecords[record.getTeamIndex(awayTeamID)].isTeamInOps(homeTeamID)) {
-            record.teamRecords[record.getTeamIndex(awayTeamID)].newOp(homeTeamID);
-        }
-
-        record.updateScoreCards(homeTeamID, homeScore, awayTeamID, awayScore);
-
-    });
-
-    return record;
+    let record = parseCSVIntoRecord(CSVToArray(csv, ','));
+    printOutput(generateOutput(record));   
 }
 
 function generateOutput(record) {
     let output = new Output();
 
     record.teamRecords.forEach(rec => {
-        let index = output.newOutputItem(rec.teamID, rec.teamName);
-        outputItem = output.outputItems[index];
+        outputItem = output.outputItems[output.newOutputItem(rec.teamID, rec.teamName)];
 
         outputItem.classWeight = 'todo';
         outputItem.GP = rec.totalLosses + rec.totalTies + rec.totalWins;
@@ -290,6 +252,39 @@ function printOutput(out) {
     window.open(encodedUri);
 }
 
+function parseCSVIntoRecord(arr) {
+    let record = new Records();
+
+    // structure of csv input array
+    // [GAME#(unique) , TeamID(home), ClassWeight(home), HOME TEAM, HOME SCORE, AWAY SCORE, AWAY TEAM, TeamID(away), ClassWeight(away)]
+    arr.forEach(item => {
+        if(!(item.length === 9)) return;
+
+        let homeTeamID = item[1];
+        let awayTeamID = item[7];
+        let homeScore = item[4];
+        let awayScore = item[5];
+
+        //home team
+        if(!record.isTeamInTeamRecords(homeTeamID)) record.newTeamRecord(homeTeamID, item[3]);
+        if(!record.teamRecords[record.getTeamIndex(homeTeamID)].isTeamInOps(awayTeamID)) {
+            record.teamRecords[record.getTeamIndex(homeTeamID)].newOp(awayTeamID);
+        }
+
+        //away team
+        if(!record.isTeamInTeamRecords(awayTeamID)) record.newTeamRecord(awayTeamID, item[6]);
+        if(!record.teamRecords[record.getTeamIndex(awayTeamID)].isTeamInOps(homeTeamID)) {
+            record.teamRecords[record.getTeamIndex(awayTeamID)].newOp(homeTeamID);
+        }
+
+        record.updateScoreCards(homeTeamID, homeScore, awayTeamID, awayScore);
+    });
+
+    return record;
+}
+
+//end showcase methods ===========================================================================================================================
+
 function calcOW(record, teamID) {
     let teams = record.teamRecords.filter(team => {
         return (
@@ -300,12 +295,12 @@ function calcOW(record, teamID) {
 
     let oppW = 0;
     teams.forEach(team => {
-        let reduxTeam = team.getTeamInOps(teamID);
+        let reduceTeam = team.getTeamInOps(teamID);
+        let reduceTotalGames = (reduceTeam.wins + reduceTeam.losses);
+        let totalGames = (team.totalWins + team.totalLosses) - reduceTotalGames;
+        let wins = team.totalWins - reduceTeam.wins;
 
-        let totalGames = (team.totalWins + team.totalLosses) - (reduxTeam.wins + reduxTeam.losses);
-        let wins = team.totalWins - reduxTeam.wins;
-
-        (totalGames > 0) ? oppW += (wins / totalGames) : oppW += 0;
+        if (totalGames > 0) oppW += (reduceTotalGames * (wins / totalGames));
     })
 
     let team = record.teamRecords[record.getTeamIndex(teamID)];
@@ -335,4 +330,9 @@ function calcOOW(record, teamID) {
 
 function calcSOS(OW, OOW) {
     return ((2 * Number(OW)) + Number(OOW)) / 3;
+}
+
+function calcRankings(SoS, CW, AGD) {
+    let ranking = SoS + CW + AGD
+    return ranking
 }
