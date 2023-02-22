@@ -196,8 +196,8 @@ class Records {
 
     handleNoClassWeight(homeTeam, homeScore, awayTeam, awayScore) {
         if((homeTeam.classWeight === 0 && homeTeam.totalGames > MIN_GAMES_FOR_CLASS) ||
-          (awayTeam.classWeight === 0 && awayTeam.totalGames > MIN_GAMES_FOR_CLASS) ||
-          (homeTeam.classWeight === 0 && awayTeam.classWeight === 0))
+            (awayTeam.classWeight === 0 && awayTeam.totalGames > MIN_GAMES_FOR_CLASS) ||
+            (homeTeam.classWeight === 0 && awayTeam.classWeight === 0))
         { return }
 
         if(homeTeam.classWeight === 0 && homeTeam.totalGames + 1 === MIN_GAMES_FOR_CLASS) {
@@ -328,7 +328,24 @@ function getNextLowerRank(weight) {
     return weight;
 }
 
-function generateOutputFromRecord(record) {
+function init() {
+    document.getElementById('fileInput').addEventListener('change', handleFileSelect, false);
+}
+
+function handleFileSelect(event) {
+    const reader = new FileReader()
+    reader.onload = handleFileLoad;
+    reader.readAsText(event.target.files[0])
+}
+
+function handleFileLoad(event) {
+    const csv = event.target.result;
+    document.getElementById('fileContent').textContent = csv;
+    const record = parseCSVIntoRecord(CSVToArray(csv, ','));
+    printOutput(generateOutput(record));
+}
+
+function generateOutput(record) {
     let output = new Output();
     record.teamRecords.forEach(team => {
         let outputItem = output.newOutputItem(team.teamID, team.teamName);
@@ -350,23 +367,42 @@ function generateOutputFromRecord(record) {
 }
 
 function getCSVString(out) {
-    return out.outputItems.map(item => ({
-        'sda': item.teamID,
-        'sda': item.classWeight,
-        getClassName(item.classWeight),
-        item.name,
-        item.GP,
-        item.wins,
-        item.losses,
-        item.ties,
-        item.GF,
-        item.GA,
-        item.AGD,
-        item.OW,
-        item.OOW,
-        item.SOS,
-        (item.GP >= MIN_GAMES_FOR_RANKING) ? item.ranking : "Not Enough Games",
-    }))
+    return [
+        [
+            "TeamID",
+            "Class Weight",
+            "Class Name",
+            "Team Name",
+            "GP",
+            "Wins",
+            "Losses",
+            "Ties",
+            "GF",
+            "GA",
+            "AGD",
+            "OW",
+            "OOW",
+            "SOS",
+            "Ranking"
+        ],
+        ...out.outputItems.map(item => [
+            item.teamID,
+            item.classWeight,
+            getClassName(item.classWeight),
+            item.name,
+            item.GP,
+            item.wins,
+            item.losses,
+            item.ties,
+            item.GF,
+            item.GA,
+            item.AGD,
+            item.OW,
+            item.OOW,
+            item.SOS,
+            (item.GP >= MIN_GAMES_FOR_RANKING) ? item.ranking : "Not Enough Games"
+        ])
+    ]
 }
 
 function getClassName(weight) {
@@ -378,24 +414,31 @@ function getClassName(weight) {
     if(weight >= GOLD) return 'Platinum';
 }
 
+function printOutput(output) {
+    console.log(output)
+    const csvContent = "data:text/csv;charset=utf-8," + getCSVString(output).map(e => e.join(",")).join("\n");
+    window.open(encodeURI(csvContent));
+}
+
 function parseInputIntoRecord(matches) {
     // structure of input array
     // [{gameID: string,
     //   homeID: string,
     //   homeWeightClass: string,
+    //   homeName: string,
     //   homeScore: number,
     //   awayID: string,
     //   awayWeightClass: string,
-    //   awayScore: number,
+    //   awayScore: number
     //   }, ...]
 
     let record = new Records();
     matches.forEach(match => {
-        let homeTeam = record.addTeamToRecord(match.homeID, match.homeWeightClass, match.awayID);
-        let awayTeam = record.addTeamToRecord(match.awayID, match.awayWeightClass, match.homeID);
+        let homeTeam = record.addTeamToRecord(match.homeID, match.homeWeightClass, match.homeTeamName, match.awayID);
+        let awayTeam = record.addTeamToRecord(match.awayID, match.awayWeightClass, match.awayTeamName, match.homeID);
 
-        record.updateClassWeights(homeTeam, match.homeScore, awayTeam, match.awayScore);
-        record.updateScoreCards(homeTeam, match.homeScore, awayTeam, match.awayScore);
+        record.updateClassWeights(homeTeam, homeScore, awayTeam, awayScore);
+        record.updateScoreCards(homeTeam, homeScore, awayTeam, awayScore);
     });
     return record;
 }
@@ -403,7 +446,7 @@ function parseInputIntoRecord(matches) {
 //end showcase methods ===========================================================================================================================
 
 function getRankings(matches) {
-    return generateOutputFromRecord(parseInputIntoRecord(matches));
+    parseInputIntoRecord(matches)
 }
 
 function getOppOppWinPercent(record, oppTeams, team) {
