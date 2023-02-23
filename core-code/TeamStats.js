@@ -19,54 +19,20 @@ const AGD_FACTOR = 5;
 
 
 
-class Output {
-    outputItems = [];
-
-    newOutputItem(teamID, teamName) {
-        this.outputItems = [...this.outputItems, new OutputItem(teamID, teamName)];
-        return this.outputItems[this.outputItems.length - 1];
-    }
-}
-
-class OutputItem {
-    teamID = "";
-    classWeight = "";
-    name = "";
-    GP = 0;
-    wins = 0;
-    losses = 0;
-    ties = 0;
-    GF = 0;
-    GA = 0;
-    AGD = 0.0;
-    OW = 0.0;
-    OOW = 0.0;
-    SOS = 0.0;
-    ranking = "";
-
-    constructor(teamID = "", teamName = "") {
-        this.teamID = teamID;
-        this.name = teamName
-    }
-}
 
 class Records {
     teamRecords = [];
 
-    newTeamRecord(teamID, teamName, teamWeight) {
-        this.teamRecords = [...this.teamRecords, new TeamRecord(teamID, teamName, teamWeight)]
+    newTeamRecord(teamID, teamWeight) {
+        this.teamRecords = [...this.teamRecords, new TeamRecord(teamID, teamWeight)]
         return this.teamRecords[this.teamRecords.length - 1]
     }
 
-    addTeamToRecord(teamID, teamWeight, teamName, oppTeamID) {
+    addTeamToRecord(teamID, teamWeight, oppTeamID) {
         let team = this.getTeamFromID(teamID)
-        if(team === undefined) team = this.newTeamRecord(teamID, teamName, teamWeight);
+        if(team === undefined) team = this.newTeamRecord(teamID, teamWeight);
         if(!team.isTeamInOps(oppTeamID)) team.newOp(oppTeamID);
         return team;
-    }
-
-    getTeamNameFromID(teamID) {
-        return this.teamRecords[this.getTeamIndex(teamID)].teamName
     }
 
     getTeamFromID(teamID) {
@@ -233,29 +199,29 @@ class Records {
             (homeTeamScore > awayTeamScore) ? homeTeamAGDScore -= goalDelta : awayTeamAGDScore -= goalDelta
         }
 
-        homeTeam.totalGoalFor += Number(homeTeamAGDScore);
-        homeTeam.totalGoalAgainst += Number(awayTeamAGDScore);
-        awayTeam.totalGoalFor += Number(awayTeamAGDScore);
-        awayTeam.totalGoalAgainst += Number(homeTeamAGDScore);
+        homeTeam.totalGoalFor += homeTeamAGDScore;
+        homeTeam.totalGoalAgainst += awayTeamAGDScore;
+        awayTeam.totalGoalFor += awayTeamAGDScore;
+        awayTeam.totalGoalAgainst += homeTeamAGDScore;
 
         homeTeam.totalGames++;
         awayTeam.totalGames++;
 
         const homeTeamOpp = homeTeam.getTeamInOps(awayTeam);
         const awayTeamOpp = awayTeam.getTeamInOps(homeTeam);
-        if (Number(homeTeamScore) > Number(awayTeamScore)) {
+        if (homeTeamScore > awayTeamScore) {
             homeTeam.totalWins++;
             homeTeamOpp.wins++;
             awayTeam.totalLosses++;
             awayTeamOpp.losses++;
         }
-        if (Number(homeTeamScore) < Number(awayTeamScore)) {
+        if (homeTeamScore < awayTeamScore) {
             homeTeam.totalLosses++;
             homeTeamOpp.losses++;
             awayTeam.totalWins++;
             awayTeamOpp.wins++;
         }
-        if (Number(homeTeamScore) === Number(awayTeamScore)) {
+        if (homeTeamScore === awayTeamScore) {
             homeTeam.totalTies++;
             homeTeamOpp.ties++;
             awayTeam.totalTies++;
@@ -265,9 +231,8 @@ class Records {
 }
 
 class TeamRecord {
-    constructor(teamID = "", teamName = "", classWeight = 0) {
+    constructor(teamID = "", classWeight = 0) {
         this.teamID = teamID;
-        this.teamName = teamName;
         this.opponents = [];
         this.totalWins = 0;
         this.totalLosses = 0;
@@ -329,44 +294,32 @@ function getNextLowerRank(weight) {
 }
 
 function generateOutputFromRecord(record) {
-    let output = new Output();
+    let output = [];
     record.teamRecords.forEach(team => {
-        let outputItem = output.newOutputItem(team.teamID, team.teamName);
+        let ow = calcOW(record, team);
+        let oow = calcOOW(record, team);
+        let sos = calcSOS(ow, oow);
 
-        outputItem.classWeight = team.classWeight;
-        outputItem.GP = team.totalGames;
-        outputItem.wins = team.totalWins;
-        outputItem.losses = team.totalLosses;
-        outputItem.ties = team.totalTies;
-        outputItem.GF = team.totalGoalFor;
-        outputItem.GA = team.totalGoalAgainst;
-        outputItem.AGD = (outputItem.GF - outputItem.GA) / outputItem.GP;
-        outputItem.OW = calcOW(record, team);
-        outputItem.OOW = calcOOW(record, team);
-        outputItem.SOS = calcSOS(outputItem.OW, outputItem.OOW);
-        outputItem.ranking = (team.classWeight > 0) ? calcRankings(outputItem.SOS, team.classWeight, outputItem.AGD) : "Bad Class Weight";
+        output.push({
+            teamID: team.teamID,
+            weightClass: getClassName(team.classWeight),
+            classWeight: team.classWeight,
+            gp: team.totalGames,
+            wins: team.totalWins,
+            losses: team.totalLosses,
+            ties: team.totalTies,
+            gf: team.totalGoalFor,
+            ga: team.totalGoalAgainst,
+            agd: (team.totalGoalFor - team.totalGoalAgainst) / team.totalGames,
+            ow: ow,
+            oow: oow,
+            sos: sos,
+            ranking: (team.totalGames >= MIN_GAMES_FOR_RANKING) ?
+                        calcRankings(sos, team.classWeight, ((team.totalGoalFor - team.totalGoalAgainst) / team.totalGames))
+                        : -1
+        })
     })
     return output;
-}
-
-function getCSVString(out) {
-    return out.outputItems.map(item => ({
-        'sda': item.teamID,
-        'sda': item.classWeight,
-        getClassName(item.classWeight),
-        item.name,
-        item.GP,
-        item.wins,
-        item.losses,
-        item.ties,
-        item.GF,
-        item.GA,
-        item.AGD,
-        item.OW,
-        item.OOW,
-        item.SOS,
-        (item.GP >= MIN_GAMES_FOR_RANKING) ? item.ranking : "Not Enough Games",
-    }))
 }
 
 function getClassName(weight) {
@@ -379,16 +332,6 @@ function getClassName(weight) {
 }
 
 function parseInputIntoRecord(matches) {
-    // structure of input array
-    // [{gameID: string,
-    //   homeID: string,
-    //   homeWeightClass: string,
-    //   homeScore: number,
-    //   awayID: string,
-    //   awayWeightClass: string,
-    //   awayScore: number,
-    //   }, ...]
-
     let record = new Records();
     matches.forEach(match => {
         let homeTeam = record.addTeamToRecord(match.homeID, match.homeWeightClass, match.awayID);
@@ -400,10 +343,41 @@ function parseInputIntoRecord(matches) {
     return record;
 }
 
-//end showcase methods ===========================================================================================================================
-
 function getRankings(matches) {
+    // structure of matches array
+    // [
+    //   {
+    //     gameID: string,
+    //     homeID: string,
+    //     homeWeightClass: number,
+    //     homeScore: number,
+    //     awayID: string,
+    //     awayWeightClass: number,
+    //     awayScore: number
+    //   },
+    //   ...
+    // ]
     return generateOutputFromRecord(parseInputIntoRecord(matches));
+    // structure of output array
+    // [
+    //   {
+    //     teamID: string,
+    //     weightClass: string,
+    //     classWeight: number,
+    //     gp: number,
+    //     wins: number,
+    //     losses: number,
+    //     ties: number,
+    //     gf: number,
+    //     ga: number,
+    //     agd: number,
+    //     ow: number,
+    //     oow: number,
+    //     sos: number,
+    //     ranking: number
+    //   },
+    //   ...
+    // ]
 }
 
 function getOppOppWinPercent(record, oppTeams, team) {
@@ -411,7 +385,7 @@ function getOppOppWinPercent(record, oppTeams, team) {
     oppTeams.forEach(oppTeam => {
         let multi = 0;
         oppTeam.opponents.forEach(oppOppTeam => {
-            if(record.getTeamNameFromID(oppOppTeam.teamID) === team.teamName) multi = (oppOppTeam.wins + oppOppTeam.ties + oppOppTeam.losses);
+            if(oppOppTeam.teamID === team.teamID) multi = (oppOppTeam.wins + oppOppTeam.ties + oppOppTeam.losses);
         });
 
         oppOppW += (multi * calcOW(record, oppTeam));

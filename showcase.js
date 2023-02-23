@@ -58,13 +58,6 @@ class Records {
         return this.teamRecords[this.teamRecords.length - 1]
     }
 
-    addTeamToRecord(teamID, teamWeight, teamName, oppTeamID) {
-        let team = this.getTeamFromID(teamID)
-        if(team === undefined) team = this.newTeamRecord(teamID, teamName, teamWeight);
-        if(!team.isTeamInOps(oppTeamID)) team.newOp(oppTeamID);
-        return team;
-    }
-
     getTeamNameFromID(teamID) {
         return this.teamRecords[this.getTeamIndex(teamID)].teamName
     }
@@ -233,29 +226,29 @@ class Records {
             (homeTeamScore > awayTeamScore) ? homeTeamAGDScore -= goalDelta : awayTeamAGDScore -= goalDelta
         }
 
-        homeTeam.totalGoalFor += Number(homeTeamAGDScore);
-        homeTeam.totalGoalAgainst += Number(awayTeamAGDScore);
-        awayTeam.totalGoalFor += Number(awayTeamAGDScore);
-        awayTeam.totalGoalAgainst += Number(homeTeamAGDScore);
+        homeTeam.totalGoalFor += homeTeamAGDScore;
+        homeTeam.totalGoalAgainst += awayTeamAGDScore;
+        awayTeam.totalGoalFor += awayTeamAGDScore;
+        awayTeam.totalGoalAgainst += homeTeamAGDScore;
 
         homeTeam.totalGames++;
         awayTeam.totalGames++;
 
         const homeTeamOpp = homeTeam.getTeamInOps(awayTeam);
         const awayTeamOpp = awayTeam.getTeamInOps(homeTeam);
-        if (Number(homeTeamScore) > Number(awayTeamScore)) {
+        if (homeTeamScore > awayTeamScore) {
             homeTeam.totalWins++;
             homeTeamOpp.wins++;
             awayTeam.totalLosses++;
             awayTeamOpp.losses++;
         }
-        if (Number(homeTeamScore) < Number(awayTeamScore)) {
+        if (homeTeamScore < awayTeamScore) {
             homeTeam.totalLosses++;
             homeTeamOpp.losses++;
             awayTeam.totalWins++;
             awayTeamOpp.wins++;
         }
-        if (Number(homeTeamScore) === Number(awayTeamScore)) {
+        if (homeTeamScore === awayTeamScore) {
             homeTeam.totalTies++;
             homeTeamOpp.ties++;
             awayTeam.totalTies++;
@@ -326,6 +319,27 @@ function getNextLowerRank(weight) {
     if(weight > WOOD) return WOOD;
     if(weight > NIL) return NIL;
     return weight;
+}
+
+function CSVToArray(strData, strDelimiter){
+    const objPattern = new RegExp((
+            "(\\" + strDelimiter + "|\\r?\\n|\\r|^)" + "(?:\"([^\"]*(?:\"\"[^\"]*)*)\"|" + "([^\"\\" + strDelimiter + "\\r\\n]*))"
+        ), "gi"
+    );
+    let output = [[]];
+    let arrMatches = null;
+    while (arrMatches = objPattern.exec(strData)){
+        let strMatchedDelimiter = arrMatches[1];
+        if (strMatchedDelimiter.length && strMatchedDelimiter !== strDelimiter) output.push([]);
+
+        let strMatchedValue;
+        (arrMatches[2]) ?
+            strMatchedValue = arrMatches[2].replace(new RegExp("\"\"", "g"), "\"") :
+            strMatchedValue = arrMatches[3];
+
+        output[output.length - 1].push(strMatchedValue);
+    }
+    return output;
 }
 
 function init() {
@@ -420,41 +434,48 @@ function printOutput(output) {
     window.open(encodeURI(csvContent));
 }
 
-function parseInputIntoRecord(matches) {
-    // structure of input array
-    // [{gameID: string,
-    //   homeID: string,
-    //   homeWeightClass: string,
-    //   homeName: string,
-    //   homeScore: number,
-    //   awayID: string,
-    //   awayWeightClass: string,
-    //   awayScore: number
-    //   }, ...]
+function addTeamToRecord(record, teamID, teamWeight, teamName, oppTeamID) {
+    let team = record.getTeamFromID(teamID)
+    if(team === undefined) team = record.newTeamRecord(teamID, teamName, teamWeight);
+    if(!team.isTeamInOps(oppTeamID)) team.newOp(oppTeamID);
+    return team;
+}
 
+function parseCSVIntoRecord(csvArray) {
     let record = new Records();
-    matches.forEach(match => {
-        let homeTeam = record.addTeamToRecord(match.homeID, match.homeWeightClass, match.homeTeamName, match.awayID);
-        let awayTeam = record.addTeamToRecord(match.awayID, match.awayWeightClass, match.awayTeamName, match.homeID);
 
-        record.updateClassWeights(homeTeam, homeScore, awayTeam, awayScore);
-        record.updateScoreCards(homeTeam, homeScore, awayTeam, awayScore);
+    // structure of csv array
+    // [[GAME#(unique) , TeamID(home), ClassWeight(home), HOME TEAM, HOME SCORE, AWAY SCORE, AWAY TEAM, TeamID(away), ClassWeight(away)], ...]
+    csvArray.forEach(item => {
+        if(!(item.length === 9)) return;
+
+        let homeTeamID     = item[1];
+        let homeTeamWeight = item[2];
+        let homeTeamName   = item[3];
+        let homeScore      = item[4];
+        let awayScore      = item[5];
+        let awayTeamName   = item[6];
+        let awayTeamID     = item[7];
+        let awayTeamWeight = item[8];
+
+        let homeTeam = addTeamToRecord(record, homeTeamID, Number(homeTeamWeight), homeTeamName, awayTeamID);
+        let awayTeam = addTeamToRecord(record, awayTeamID, Number(awayTeamWeight), awayTeamName, homeTeamID);
+
+        record.updateClassWeights(homeTeam, Number(homeScore), awayTeam, Number(awayScore));
+        record.updateScoreCards(homeTeam, Number(homeScore), awayTeam, Number(awayScore));
     });
+
     return record;
 }
 
 //end showcase methods ===========================================================================================================================
-
-function getRankings(matches) {
-    parseInputIntoRecord(matches)
-}
 
 function getOppOppWinPercent(record, oppTeams, team) {
     let oppOppW = 0;
     oppTeams.forEach(oppTeam => {
         let multi = 0;
         oppTeam.opponents.forEach(oppOppTeam => {
-            if(record.getTeamNameFromID(oppOppTeam.teamID) === team.teamName) multi = (oppOppTeam.wins + oppOppTeam.ties + oppOppTeam.losses);
+            if(oppOppTeam.teamID === team.teamID) multi = (oppOppTeam.wins + oppOppTeam.ties + oppOppTeam.losses);
         });
 
         oppOppW += (multi * calcOW(record, oppTeam));

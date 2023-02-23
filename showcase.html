@@ -1,10 +1,15 @@
-<html>
+<html lang="">
 <head>
     <script src="showcase.js"></script>
+    <script src="convertCSVtoJSON.js"></script>
+
     <title>SOS showcase</title>
 </head>
-<body onload="init()">
+<body onload="init(); init2()">
+    <label for="fileInput">CSV INPUT</label>
     <input id="fileInput" type="file" name="file" />
+    <label for="fileInput2">CONVERT CSV TO JSON</label>
+    <input id="fileInput2" type="file" name="file" />
     <pre id="fileContent"></pre>
       
 </body>
